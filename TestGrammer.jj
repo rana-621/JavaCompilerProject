@@ -1,0 +1,331 @@
+options {
+  STATIC = false;
+  LOOKAHEAD = 2;
+}
+
+PARSER_BEGIN(JavaParser)
+
+import java.io.*;
+
+public class JavaParser {
+    public static void main(String args[]) {
+        try {
+            BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            String input = sb.toString();
+
+            // First pass: check for lowercase "string"
+            if (input.contains("string")) {
+                System.out.println("Error: Found lowercase 'string'. Java requires 'String' with capital 'S'.");
+                return;
+            }
+
+            JavaParser parser = new JavaParser(new java.io.StringReader(input));
+            parser.CompilationUnit();
+            System.out.println("Syntax validation successful.\n");
+
+            System.out.println("Symbol Table:");
+            System.out.println("--------------------------------------------");
+            System.out.printf("%-15s %-15s %-8s %s%n", "TOKEN TYPE", "VALUE", "LINE", "COLUMN");
+            System.out.println("--------------------------------------------");
+
+            JavaParser tokenParser = new JavaParser(new java.io.StringReader(input));
+            Token token;
+            while ((token = tokenParser.getNextToken()).kind != EOF) {
+                System.out.printf("%-15s %-15s %-8d %d%n",
+                    tokenImage[token.kind],
+                    token.image,
+                    token.beginLine,
+                    token.beginColumn);
+            }
+
+        } catch (ParseException e) {
+            System.out.println("Syntax Error: " + e.getMessage());
+        } catch (TokenMgrError e) {
+            System.out.println("Lexical Error: " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("IO Error: " + e.getMessage());
+        }
+    }
+}
+
+PARSER_END(JavaParser)
+
+SKIP : {
+    " " | "\t" | "\n" | "\r" | "\f"
+    | < "//" (~["\n","\r"])* ("\n"|"\r"|"\r\n") >
+    | < "/*" (~["*"])* "*" (~["/"] (~["*"])* "*")* "/" >
+}
+
+TOKEN : {
+    < PUBLIC: "public" >
+  | < PRIVATE: "private" >
+  | < PROTECTED: "protected" >
+  | < STATIC: "static" >
+  | < CLASS: "class" >
+  | < VOID: "void" >
+  | < MAIN: "main" >
+  | < NEW: "new" >
+  | < IF: "if" >
+  | < ELSE: "else" >
+  | < RETURN: "return" >
+  | < EXTENDS: "extends" >
+  | < IMPLEMENTS: "implements" >
+  | < INT: "int" >
+  | < STRING: "String" >
+  | < BOOLEAN: "boolean" >
+  | < SYSTEM: "System" >
+  | < OUT: "out" >
+  | < PRINTLN: "println" >
+  | < INTEGER_LITERAL: (["0"-"9"])+ >
+  | < STRING_LITERAL: "\"" (~["\"","\\","\n","\r"])* "\"" >
+  | < IDENTIFIER: ["a"-"z","A"-"Z","_"] (["a"-"z","A"-"Z","0"-"9","_"])* >
+  | < PLUS: "+" >
+  | < MINUS: "-" >
+  | < MULTIPLY: "*" >
+  | < DIVIDE: "/" >
+  | < GT: ">" >
+  | < LT: "<" >
+  | < GE: ">=" >
+  | < LE: "<=" >
+  | < EQ: "==" >
+  | < NE: "!=" >
+  | < ASSIGN: "=" >
+  | < SEMICOLON: ";" >
+  | < DOT: "." >
+  | < COMMA: "," >
+  | < LPAREN: "(" >
+  | < RPAREN: ")" >
+  | < LBRACE: "{" >
+  | < RBRACE: "}" >
+  | < LBRACKET: "[" >
+  | < RBRACKET: "]" >
+}
+
+void CompilationUnit() : {}
+{
+    (
+        ClassDeclaration()
+        |
+        Statement()
+    )
+    <EOF>
+}
+
+void ClassDeclaration() : {}
+{
+    <PUBLIC> <CLASS> <IDENTIFIER>
+    [ <EXTENDS> <IDENTIFIER> ]
+    [ <IMPLEMENTS> ImplementsList() ]
+    ClassBody()
+}
+
+void ImplementsList() : {}
+{
+    <IDENTIFIER> ( <COMMA> <IDENTIFIER> )*
+}
+
+void ClassBody() : {}
+{
+    <LBRACE>
+        ( ClassBodyDeclaration() )*
+    <RBRACE>
+}
+
+void ClassBodyDeclaration() : {}
+{
+    LOOKAHEAD( [ <PUBLIC> | <PRIVATE> | <PROTECTED> ] Type() <IDENTIFIER> <LPAREN> )
+    MethodDeclaration()
+    |
+    LOOKAHEAD( [ <PUBLIC> | <PRIVATE> | <PROTECTED> ] <STATIC> <VOID> <MAIN> )
+    MainMethod()
+    |
+    FieldDeclaration()
+}
+
+void FieldDeclaration() : {}
+{
+    [ <PUBLIC> | <PRIVATE> | <PROTECTED> ]
+    [ <STATIC> ]
+    Type() <IDENTIFIER> [ <ASSIGN> Expression() ] <SEMICOLON>
+}
+
+void MainMethod() : {}
+{
+    <PUBLIC> <STATIC> <VOID> <MAIN>
+    <LPAREN> <STRING> <LBRACKET> <RBRACKET> <IDENTIFIER> <RPAREN>
+    Block()
+}
+
+void MethodDeclaration() : {}
+{
+    [ <PUBLIC> | <PRIVATE> | <PROTECTED> ]
+    [ <STATIC> ]
+    ReturnType() <IDENTIFIER> <LPAREN> [ ParameterList() ] <RPAREN>
+    Block()
+}
+
+void ReturnType() : {}
+{
+    <VOID> | Type()
+}
+
+void ParameterList() : {}
+{
+    Parameter() ( <COMMA> Parameter() )*
+}
+
+void Parameter() : {}
+{
+    Type() <IDENTIFIER>
+}
+
+void Block() : {}
+{
+    <LBRACE> ( BlockStatement() )* <RBRACE>
+}
+
+void BlockStatement() : {}
+{
+    LOOKAHEAD(2)
+    LocalVariableDeclaration()
+    |
+    Statement()
+}
+
+void LocalVariableDeclaration() : {}
+{
+    Type() <IDENTIFIER> [ <ASSIGN> Expression() ] <SEMICOLON>
+}
+
+void Statement() : {}
+{
+    LOOKAHEAD(2)
+    Block()
+    |
+    IfStatement()
+    |
+    ReturnStatement()
+    |
+    ExpressionStatement()
+    |
+    LocalVariableDeclaration()
+}
+
+void ExpressionStatement() : {}
+{
+    Expression() <SEMICOLON>
+}
+
+void IfStatement() : {}
+{
+    <IF> <LPAREN> Expression() <RPAREN>
+    Statement()
+    [ LOOKAHEAD(1) <ELSE> Statement() ]
+}
+
+void ReturnStatement() : {}
+{
+    <RETURN> [ Expression() ] <SEMICOLON>
+}
+
+void Type() : {}
+{
+    PrimitiveType() [ <LBRACKET> <RBRACKET> ]
+    |
+    ReferenceType() [ <LBRACKET> <RBRACKET> ]
+}
+
+void PrimitiveType() : {}
+{
+    <INT> | <BOOLEAN>
+}
+
+void ReferenceType() : {}
+{
+    <STRING> | <IDENTIFIER>
+}
+
+void Expression() : {}
+{
+    ConditionalExpression()
+    |
+    AssignmentExpression()
+    |
+    ObjectCreation()
+    |
+    PrimaryExpression()
+}
+
+void ObjectCreation() : {}
+{
+    <NEW> <IDENTIFIER> <LPAREN> [ ArgumentList() ] <RPAREN>
+}
+
+void AssignmentExpression() : {}
+{
+    <IDENTIFIER> <ASSIGN> Expression()
+}
+
+void ConditionalExpression() : {}
+{
+    RelationalExpression() [ BinaryOperator() RelationalExpression() ]
+}
+
+void RelationalExpression() : {}
+{
+    AdditiveExpression() [ ComparisonOperator() AdditiveExpression() ]
+}
+
+void BinaryOperator() : {}
+{
+    <PLUS> | <MINUS> | <MULTIPLY> | <DIVIDE>
+}
+
+void ComparisonOperator() : {}
+{
+    <GT> | <LT> | <GE> | <LE> | <EQ> | <NE>
+}
+
+void AdditiveExpression() : {}
+{
+    MultiplicativeExpression() ( ( <PLUS> | <MINUS> ) MultiplicativeExpression() )*
+}
+
+void MultiplicativeExpression() : {}
+{
+    PrimaryExpression() ( ( <MULTIPLY> | <DIVIDE> ) PrimaryExpression() )*
+}
+
+void PrimaryExpression() : {}
+{
+    <INTEGER_LITERAL>
+    |
+    <STRING_LITERAL>
+    |
+    MethodInvocation()
+    |
+    <IDENTIFIER>
+    |
+    <LPAREN> Expression() <RPAREN>
+}
+
+void MethodInvocation() : {}
+{
+    (
+        <IDENTIFIER> <DOT> <IDENTIFIER> <LPAREN> [ ArgumentList() ] <RPAREN>
+    )
+    |
+    (
+        <SYSTEM> <DOT> <OUT> <DOT> <PRINTLN> <LPAREN> Expression() <RPAREN>
+    )
+}
+
+void ArgumentList() : {}
+{
+    Expression() ( <COMMA> Expression() )*
+}
